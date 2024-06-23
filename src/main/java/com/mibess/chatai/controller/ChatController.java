@@ -1,55 +1,75 @@
 package com.mibess.chatai.controller;
 
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
+import java.util.stream.Collectors;
 
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
 
+import com.mibess.chatai.converter.MensagensConverter;
+import com.mibess.chatai.domain.Chat;
+import com.mibess.chatai.dto.MensagensDTO;
+import com.mibess.chatai.dto.RespostaChatDTO;
 import com.mibess.chatai.input.MensagemInput;
+import com.mibess.chatai.service.ChatHistoricoService;
+import com.mibess.chatai.service.ChatService;
+
+import reactor.core.publisher.Flux;
 
 @RestController
 @RequestMapping("/api")
 public class ChatController {
 
-    private final ChatClient chatClient;
+    private ChatService chatService;
+    private ChatHistoricoService chatHistoricoService;
+    private MensagensConverter mensagensConverter;
 
-    public ChatController(ChatClient chatClient) {
-        this.chatClient = chatClient;
+    public ChatController(ChatService chatService, ChatHistoricoService chatHistoricoService,
+            MensagensConverter mensagensConverter) {
+        this.chatService = chatService;
+        this.chatHistoricoService = chatHistoricoService;
+        this.mensagensConverter = mensagensConverter;
     }
 
-    @GetMapping
+    @PostMapping("chat")
     @ResponseStatus(HttpStatus.OK)
-    public ResponseEntity<Map<String, String>> hostCheck(@RequestBody MensagemInput mensagemInput) {
+    public RespostaChatDTO chat(@RequestBody MensagemInput mensagemInput) {
 
-        Map<String, String> response = new HashMap<>();
+        return chatService.chat(mensagemInput, false);
 
-        response.put("hostcheck",
-                "Ok v1 - Deployed at: " + new Date().toString() +
-                        "Mensagem:" + mensagemInput.getMensagem());
-
-        return ResponseEntity.ok().body(response);
     }
 
-    @GetMapping("chat")
+    @PostMapping("chat-stream")
     @ResponseStatus(HttpStatus.OK)
-    public ResponseEntity<Map<String, String>> chat(@RequestBody MensagemInput mensagemInput) {
+    public ResponseBodyEmitter chatStream(@RequestBody MensagemInput mensagemInput) {
 
-        Map<String, String> response = new HashMap<>();
+        Flux<String> fluxResposta = chatService.chatStream(mensagemInput, true);
 
-        response.put(
-                "resposta", chatClient.prompt()
-                        .user(mensagemInput.getMensagem())
-                        .call()
-                        .content());
+        return chatService.emitter(fluxResposta);
 
-        return ResponseEntity.ok().body(response);
+    }
+
+    @GetMapping("chat/u/{chatId}")
+    @ResponseStatus(HttpStatus.OK)
+    public List<MensagensDTO> buscarMensagens(@PathVariable String chatId) {
+        List<Chat> mensagens = chatHistoricoService.listarChats(chatId);
+
+        return mensagens.stream().map(mensagensConverter::mensagensDTO).collect(Collectors.toList());
+    }
+
+    @DeleteMapping("chat/u/{chatId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deletarChat(@PathVariable String chatId) {
+
+        chatHistoricoService.deletarChat(chatId);
+
     }
 }

@@ -1,10 +1,5 @@
 package com.mibess.chatai.input;
 
-import lombok.Getter;
-import lombok.Setter;
+public record MensagemInput(String chatId, String usuario, String mensagem) {
 
-@Getter
-@Setter
-public class MensagemInput {
-    private String mensagem;
 }
